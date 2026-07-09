@@ -5,7 +5,7 @@ import base64
 import traceback
 from ultralytics import YOLO
 import time
-
+import os
 app = Flask(__name__)
 
 
@@ -51,7 +51,7 @@ def classify_detections(results):
             if class_lower in NO_HELMET_KEYWORDS:
              not_wearing += 1
              print(f"NO_HELMET -> {class_name}")
-            elif any(k in class_lower for k in HELMET_KEYWORDS):
+            elif class_lower in HELMET_KEYWORDS:
               wearing += 1
               print(f"HELMET -> {class_name}")
             elif any(k in class_lower for k in PERSON_KEYWORDS):
@@ -162,4 +162,8 @@ def health():
 
 if __name__ == '__main__':
     print("Starting Helmet Detection System on http://localhost:5000")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", 5000))
+)
+
