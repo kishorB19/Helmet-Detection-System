@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helmet Detection System</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#eef1f5;min-height:100vh;padding:20px;color:#1f2937}
+        .container{max-width:1100px;margin:0 auto;background:#fff;padding:32px;border-radius:10px;border:1px solid #e2e6ea}
+        header{text-align:center;margin-bottom:24px}
+        h1{font-size:1.9em;font-weight:600;color:#1f2937}
+        .subtitle{color:#6b7280;margin-top:4px;font-size:.95em}
+        section{margin-bottom:28px}
+        section>h2{font-size:1.05em;font-weight:600;color:#374151;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #e5e7eb}
+        .camera-wrap{display:flex;flex-direction:column;align-items:center;gap:12px}
+        .camera-preview-box{width:320px;max-width:100%;height:240px;background:#111827;border-radius:6px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;border:1px solid #d1d5db}
+        .camera-preview-box video,.camera-preview-box img{width:100%;height:100%;object-fit:cover}
+        .camera-placeholder-text,.image-placeholder-box{color:#9ca3af;font-size:.9em;text-align:center}
+        .camera-countdown-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;padding:4px 10px;border-radius:4px;font-weight:600;font-size:.85em;display:none}
+        .camera-btn-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+        .camera-status{text-align:center;color:#4b5563;font-size:.9em;min-height:18px}
+        .camera-result-badge{display:none;text-align:center;padding:10px 18px;border-radius:6px;font-weight:600;font-size:.95em}
+        .camera-result-badge.ok{background:#ecfdf3;color:#166534;border:1px solid #bbf7d0}
+        .camera-result-badge.fail{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+        .color-legend{display:flex;justify-content:center;gap:24px;flex-wrap:wrap}
+        .legend-item{display:flex;align-items:center;gap:8px;font-size:.9em;color:#374151}
+        .color-box{width:14px;height:14px;border-radius:3px}
+        .upload-area{border:1.5px dashed #9ca3af;border-radius:8px;padding:36px 20px;text-align:center;cursor:pointer;background:#fafafa;transition:border-color .15s,background .15s}
+        .upload-area:hover{background:#f3f4f6;border-color:#6b7280}
+        .upload-area.dragover{background:#eff6ff;border-color:#3b82f6}
+        .upload-area h3{font-size:1em;font-weight:600;margin-bottom:6px;color:#374151}
+        .upload-area p{color:#6b7280;font-size:.88em}
+        .image-container{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+        .image-box h3{background:#374151;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0;margin:0;font-size:.9em;font-weight:600}
+        .image-preview{width:100%;max-height:380px;border:1px solid #d1d5db;border-top:none;border-radius:0 0 6px 6px;object-fit:contain;background:#f3f4f6}
+        .image-placeholder-box{min-height:280px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;border:1px solid #d1d5db;border-top:none;border-radius:0 0 6px 6px}
+        .controls{text-align:center;margin-top:20px}
+        .btn{border:none;padding:10px 26px;font-size:.95em;font-weight:600;border-radius:6px;cursor:pointer;margin:6px;transition:opacity .15s}
+        .btn-primary{background:#2563eb;color:#fff}
+        .btn-primary:hover:not(:disabled){opacity:.9}
+        .btn-primary:disabled{background:#d1d5db;color:#9ca3af;cursor:not-allowed}
+        .btn-secondary{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}
+        .btn-secondary:hover{background:#e5e7eb}
+        .btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+        .btn-danger:hover{background:#fecaca}
+        .loading{text-align:center;padding:24px;color:#4b5563}
+        .spinner{border:3px solid #e5e7eb;border-top:3px solid #2563eb;border-radius:50%;width:36px;height:36px;animation:spin .8s linear infinite;margin:0 auto 14px}
+        @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+        .result{background:#f9fafb;border:1px solid #e5e7eb;padding:18px;border-radius:8px;margin-top:18px;text-align:center}
+        .result h3{font-size:.95em;font-weight:600;color:#374151;margin-bottom:14px}
+        .helmet-stats{display:flex;justify-content:center;margin-bottom:14px}
+        .helmet-stat-card{background:#fff;padding:16px 40px;border-radius:8px;border:1px solid #d1d5db;border-top:3px solid #9ca3af}
+        .helmet-stat-card.wearing{border-top-color:#16a34a}
+        .helmet-stat-card.not-wearing{border-top-color:#dc2626}
+        .helmet-stat-card h4{font-size:.82em;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}
+        .helmet-stat-number{font-size:1.6em;font-weight:700;margin-top:6px;letter-spacing:.5px}
+        .wearing .helmet-stat-number{color:#16a34a}
+        .not-wearing .helmet-stat-number{color:#dc2626}
+        .stat-card{color:#6b7280;font-size:.85em}
+        .stat-number{font-size:1.1em;font-weight:600;color:#374151}
+        .error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:16px;border-radius:8px;margin-top:18px}
+        .error h3{font-size:.9em;margin-bottom:4px}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Helmet Detection System</h1>
+            <p class="subtitle">This project is used to automatically detect whether a person is wearing a safety helmet.</p>
+        </header>
+
+        <section>
+            <h2>Live Camera Capture</h2>
+            <div class="camera-wrap">
+                <div class="camera-preview-box" id="cameraPreviewBox">
+                    <div class="camera-placeholder-text" id="cameraPlaceholderText">Camera is off</div>
+                    <video id="cameraVideo" autoplay playsinline style="display:none;"></video>
+                    <img id="cameraSnapImg" style="display:none;" alt="Captured snapshot">
+                    <div class="camera-countdown-badge" id="cameraCountdownBadge">5</div>
+                </div>
+                <div class="camera-btn-row">
+                    <button id="openCameraBtn" class="btn btn-primary">Open Camera</button>
+                    <button id="stopCameraBtn" class="btn btn-danger" style="display:none;">Stop Camera</button>
+                    <button id="retakeCameraBtn" class="btn btn-secondary" style="display:none;">Retake</button>
+                </div>
+                <div class="camera-status" id="cameraStatusText"></div>
+                <div class="camera-result-badge" id="cameraResultBadge"></div>
+            </div>
+        </section>
+
+        <section>
+            <div class="color-legend">
+                <div class="legend-item"><div class="color-box" style="background:#22c55e;"></div><span>Helmet</span></div>
+                <div class="legend-item"><div class="color-box" style="background:#ef4444;"></div><span>No Helmet</span></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Upload Image</h2>
+            <div class="upload-area" id="uploadArea">
+                <h3>Click to select an image</h3>
+                <p>or drag and drop a file here</p>
+                <input type="file" id="fileInput" accept="image/*" style="display:none">
+            </div>
+
+            <div class="image-container" id="imageContainer" style="display:none;">
+                <div class="image-box">
+                    <h3>Original Image</h3>
+                    <div class="image-placeholder-box" id="originalWrap">
+                        <img id="originalImage" class="image-preview" src="" alt="Original Image" style="display:none;">
+                        <div id="originalPlaceholder">No image selected</div>
+                    </div>
+                </div>
+                <div class="image-box">
+                    <h3>Detection Result</h3>
+                    <div class="image-placeholder-box" id="resultWrap">
+                        <img id="resultImage" class="image-preview" src="" alt="Result Image" style="display:none;">
+                        <div id="resultPlaceholder">Result will appear here</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="detectBtn" class="btn btn-primary" disabled>Run Detection</button>
+                <button id="resetBtn" class="btn btn-danger">Reset</button>
+            </div>
+
+            <div id="loading" class="loading" style="display:none">
+                <div class="spinner"></div>
+                <p>Processing image...</p>
+            </div>
+
+            <div id="resultInfo" class="result" style="display:none">
+                <h3>Detection Result</h3>
+                <div class="helmet-stats">
+                    <div class="helmet-stat-card" id="helmetStatusCard">
+                        <h4>Helmet Detected</h4>
+                        <div class="helmet-stat-number" id="helmetStatusText">-</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="processingTime">0</span> ms processing time
+                </div>
+            </div>
+
+            <div id="errorInfo" class="error" style="display:none">
+                <h3>Error</h3>
+                <p id="errorMessage"></p>
+            </div>
+        </section>
+    </div>
+
+    <canvas id="cameraCanvas" style="display:none;"></canvas>
+
+    <script>
+        const getElement = id => document.getElementById(id);
+        const uploadArea = getElement('uploadArea');
+        const fileInput = $('fileInput');
+        const originalImage = $('originalImage');
+        const resultImage = $('resultImage');
+        const originalPlaceholder = $('originalPlaceholder');
+        const resultPlaceholder = $('resultPlaceholder');
+        const detectBtn = $('detectBtn');
+        const resetBtn = $('resetBtn');
+        const loading = $('loading');
+        const resultInfo = $('resultInfo');
+        const errorInfo = $('errorInfo');
+        const helmetStatusCard = $('helmetStatusCard');
+        const helmetStatusText = $('helmetStatusText');
+        const processingTime = $('processingTime');
+        const errorMessage = $('errorMessage');
+        const imageContainer = $('imageContainer');
+
+        let currentImage = null;
+
+        uploadArea.onclick = () => fileInput.click();
+        fileInput.onchange = handleFileSelect;
+        detectBtn.onclick = handleDetection;
+        resetBtn.onclick = resetApplication;
+
+        uploadArea.ondragover = e => { e.preventDefault(); uploadArea.classList.add('dragover'); };
+        uploadArea.ondragleave = () => uploadArea.classList.remove('dragover');
+        uploadArea.ondrop = e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files[0]) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        };
+
+        function handleFileSelect() {
+            if (!fileInput.files[0]) return;
+            const file = fileInput.files[0];
+            if (!file.type.match('image.*')) return showError('Please select a valid image file (JPG, PNG, JPEG)');
+            if (file.size > 10*1024*1024) return showError('File size too large. Please select an image smaller than 10MB.');
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                currentImage = e.target.result;
+                imageContainer.style.display = 'grid';
+                originalImage.src = currentImage;
+                originalImage.style.display = 'block';
+                originalPlaceholder.style.display = 'none';
+                resultImage.style.display = 'none';
+                resultPlaceholder.style.display = 'block';
+                resultInfo.style.display = 'none';
+                errorInfo.style.display = 'none';
+                detectBtn.disabled = false;
+            };
+            reader.onerror = () => showError('Error reading file. Please try another image.');
+            reader.readAsDataURL(file);
+        }
+
+        async function handleDetection() {
+            if (!currentImage) return;
+            detectBtn.disabled = true;
+            loading.style.display = 'block';
+            errorInfo.style.display = 'none';
+            resultInfo.style.display = 'none';
+            const startTime = performance.now();
+
+            try {
+                const response = await fetch('/detect', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ image: currentImage })
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server error (${response.status}): ${errorText}`);
+                }
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Detection failed');
+
+                resultImage.src = data.result_image;
+                resultImage.style.display = 'block';
+                resultPlaceholder.style.display = 'none';
+
+                const total = (typeof data.total_detections === 'number') ? data.total_detections : (data.wearing_helmet + data.not_wearing_helmet);
+                helmetStatusCard.classList.remove('wearing','not-wearing');
+                if (data.not_wearing_helmet > 0) {
+                    helmetStatusText.textContent = 'No';
+                    helmetStatusCard.classList.add('not-wearing');
+                } else if (data.wearing_helmet > 0) {
+                    helmetStatusText.textContent = 'Yes';
+                    helmetStatusCard.classList.add('wearing');
+                } else if (total > 0) {
+                    helmetStatusText.textContent = 'Unclear';
+                    helmetStatusCard.classList.add('not-wearing');
+                } else {
+                    helmetStatusText.textContent = 'No person detected';
+                    helmetStatusCard.classList.add('not-wearing');
+                }
+
+                processingTime.textContent = Math.round(performance.now() - startTime);
+                resultInfo.style.display = 'block';
+                return data;
+            } catch (error) {
+                showError(error.message || 'An error occurred during detection');
+                throw error;
+            } finally {
+                loading.style.display = 'none';
+                detectBtn.disabled = false;
+            }
+        }
+
+        function resetApplication() {
+            fileInput.value = '';
+            currentImage = null;
+            imageContainer.style.display = 'none';
+            originalImage.src = ''; originalImage.style.display = 'none';
+            originalPlaceholder.style.display = 'block';
+            resultImage.src = ''; resultImage.style.display = 'none';
+            resultPlaceholder.style.display = 'block';
+            resultInfo.style.display = 'none';
+            errorInfo.style.display = 'none';
+            loading.style.display = 'none';
+            detectBtn.disabled = true;
+        }
+
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorInfo.style.display = 'block';
+            resultInfo.style.display = 'none';
+        }
+
+        window.onload = async () => {
+            try {
+                const resp = await fetch('/health');
+                
+            } catch (e) { showError('Cannot connect to server. Make sure the Flask app is running.'); }
+        };
+
+        
+        const openCameraBtn = $('openCameraBtn');
+        const stopCameraBtn = $('stopCameraBtn');
+        const retakeCameraBtn = $('retakeCameraBtn');
+        const cameraVideo = $('cameraVideo');
+        const cameraSnapImg = $('cameraSnapImg');
+        const cameraPlaceholderText = $('cameraPlaceholderText');
+        const cameraCountdownBadge = $('cameraCountdownBadge');
+        const cameraStatusText = $('cameraStatusText');
+        const cameraResultBadge = $('cameraResultBadge');
+        const cameraCanvas = $('cameraCanvas');
+
+        let cameraStream = null;
+        let cameraCountdownInterval = null;
+        let cameraCaptureTimeout = null;
+
+        openCameraBtn.onclick = startCamera;
+        stopCameraBtn.onclick = () => stopCamera(true);
+        retakeCameraBtn.onclick = startCamera;
+
+        async function startCamera() {
+            resetCameraUI();
+            cameraResultBadge.style.display = 'none';
+            cameraResultBadge.className = 'camera-result-badge';
+            cameraSnapImg.style.display = 'none';
+            retakeCameraBtn.style.display = 'none';
+
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+                cameraVideo.srcObject = cameraStream;
+                cameraVideo.style.display = 'block';
+                cameraPlaceholderText.style.display = 'none';
+                openCameraBtn.style.display = 'none';
+                stopCameraBtn.style.display = 'inline-block';
+
+                const delayMs = Math.floor(Math.random() * 5000);
+                let sec = Math.ceil((5000 - delayMs) / 1000) || 1;
+                cameraCountdownBadge.style.display = 'block';
+                cameraCountdownBadge.textContent = sec;
+                cameraStatusText.textContent = 'Camera active — capturing shortly...';
+                cameraCountdownInterval = setInterval(() => {
+                    sec = Math.max(0, sec - 1);
+                    cameraCountdownBadge.textContent = sec;
+                }, 1000);
+
+                cameraCaptureTimeout = setTimeout(captureSnapshot, delayMs);
+            } catch (err) {
+                cameraPlaceholderText.textContent = 'Could not access camera: ' + (err.message || err);
+                cameraPlaceholderText.style.display = 'block';
+                openCameraBtn.style.display = 'inline-block';
+                stopCameraBtn.style.display = 'none';
+                cameraStatusText.textContent = '';
+            }
+        }
+
+        function captureSnapshot() {
+            if (!cameraStream || !cameraVideo.videoWidth) {
+                cameraCaptureTimeout = setTimeout(captureSnapshot, 200);
+                return;
+            }
+            clearInterval(cameraCountdownInterval);
+            cameraCountdownBadge.style.display = 'none';
+
+            cameraCanvas.width = cameraVideo.videoWidth;
+            cameraCanvas.height = cameraVideo.videoHeight;
+            const ctx = cameraCanvas.getContext('2d');
+            ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+            const snapDataUrl = cameraCanvas.toDataURL('image/jpeg', 0.92);
+
+            cameraSnapImg.src = snapDataUrl;
+            cameraSnapImg.style.display = 'block';
+            cameraVideo.style.display = 'none';
+            stopMediaTracks();
+            stopCameraBtn.style.display = 'none';
+            retakeCameraBtn.style.display = 'inline-block';
+            cameraStatusText.textContent = 'Snapshot captured. Running detection...';
+
+            currentImage = snapDataUrl;
+            imageContainer.style.display = 'grid';
+            originalImage.src = currentImage;
+            originalImage.style.display = 'block';
+            originalPlaceholder.style.display = 'none';
+            resultImage.style.display = 'none';
+            resultPlaceholder.style.display = 'block';
+            resultInfo.style.display = 'none';
+            errorInfo.style.display = 'none';
+            detectBtn.disabled = false;
+
+            handleDetection().then(data => {
+                if (!data) return;
+                cameraResultBadge.style.display = 'block';
+                if (data.result_image) cameraSnapImg.src = data.result_image;
+                const total = (typeof data.total_detections === 'number') ? data.total_detections : (data.wearing_helmet + data.not_wearing_helmet);
+                if (data.not_wearing_helmet > 0) {
+                    cameraResultBadge.className = 'camera-result-badge fail';
+                    cameraResultBadge.textContent = 'Person detected — Helmet: No';
+                } else if (data.wearing_helmet > 0) {
+                    cameraResultBadge.className = 'camera-result-badge ok';
+                    cameraResultBadge.textContent = 'Person detected — Helmet: Yes';
+                } else if (total > 0) {
+                    cameraResultBadge.className = 'camera-result-badge fail';
+                    cameraResultBadge.textContent = 'Person detected — Helmet status unclear';
+                } else {
+                    cameraResultBadge.className = 'camera-result-badge fail';
+                    cameraResultBadge.textContent = 'No person detected in snapshot';
+                }
+                cameraStatusText.textContent = 'Done. Click Retake to capture another snapshot.';
+            }).catch(() => {
+                cameraStatusText.textContent = 'Detection failed. Click Retake to try again.';
+            });
+        }
+
+        function stopMediaTracks() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+        }
+
+        function stopCamera(manual) {
+            clearTimeout(cameraCaptureTimeout);
+            clearInterval(cameraCountdownInterval);
+            stopMediaTracks();
+            cameraVideo.style.display = 'none';
+            cameraCountdownBadge.style.display = 'none';
+            openCameraBtn.style.display = 'inline-block';
+            stopCameraBtn.style.display = 'none';
+            if (manual) {
+                cameraSnapImg.style.display = 'none';
+                retakeCameraBtn.style.display = 'none';
+                cameraResultBadge.style.display = 'none';
+                cameraPlaceholderText.textContent = 'Camera is off';
+                cameraPlaceholderText.style.display = 'block';
+                cameraStatusText.textContent = '';
+            }
+        }
+
+        function resetCameraUI() {
+            clearTimeout(cameraCaptureTimeout);
+            clearInterval(cameraCountdownInterval);
+            cameraCountdownBadge.style.display = 'none';
+            cameraPlaceholderText.style.display = 'none';
+            cameraStatusText.textContent = '';
+        }
+    </script>
+</body>
+</html>
