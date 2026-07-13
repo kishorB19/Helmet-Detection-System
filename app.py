@@ -9,15 +9,15 @@ import os
 app = Flask(__name__)
 
 
-model = None
+try:
+    model = YOLO("helmet.pt")
+     
+except Exception as e:
+    print(e)
+    model = None
 
-def get_model():
-    global model
-    if model is None:
-        model = YOLO("helmet.pt")
-    return model
 
-DETECTION_CONF = 0.25   # increased from 0.30 to reduce false positives
+DETECTION_CONF = 0.5
 DETECTION_IOU  = 0.45
 
 
@@ -27,7 +27,7 @@ HELMET_KEYWORDS = ['helmet', 'hardhat', 'with_helmet', 'wearing_helmet']
 NO_HELMET_KEYWORDS = ['no_helmet', 'no-helmet', 'without_helmet',
                        'without-helmet', 'head', 'no helmet', 'nohelmet']
 
-
+print(model.names)
 
 PERSON_KEYWORDS = ['person']
 
@@ -43,7 +43,7 @@ def classify_detections(results):
         for box in r.boxes:
             total += 1
             class_id = int(box.cls[0])
-            class_name = get_model().names[class_id]
+            class_name = model.names[class_id]
             confidence = float(box.conf[0])
             class_lower = class_name.lower().strip()
 
@@ -78,7 +78,7 @@ def detect_objects(image_data):
             raise ValueError("Could not decode image")
 
 
-       results = get_model()(img, imgsz=640, conf=DETECTION_CONF, iou=DETECTION_IOU)
+        results = model(img, imgsz=640, conf=DETECTION_CONF, iou=DETECTION_IOU)
 
 
         result_img = results[0].plot(line_width=2, font_size=0.8, conf=True)
@@ -153,12 +153,10 @@ def detect():
 
 @app.route('/health')
 def health():
-    m = get_model()
-
     return jsonify({
         'status': 'healthy',
-        'model': 'loaded',
-        'model_classes': list(m.names.values())
+        'model': 'loaded' if model else 'failed',
+        'model_classes': list(model.names.values()) if model else []
     })
 
 
