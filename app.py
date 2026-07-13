@@ -3,71 +3,115 @@ import cv2
 import numpy as np
 import base64
 import traceback
-from ultralytics import YOLO
 import time
 import os
+import onnxruntime as ort
+
 app = Flask(__name__)
 
+MODEL_PATH = "helmet.onnx"
+DETECTION_CONF = 0.5
+DETECTION_IOU = 0.45
+INPUT_SIZE = 640
+
+CLASS_NAMES = {0: "Helmet", 1: "No Helmet"}
 
 try:
-    model = YOLO("helmet.pt")
-     
+    session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
+    input_name = session.get_inputs()[0].name
 except Exception as e:
     print(e)
-    model = None
+    session = None
+    input_name = None
 
 
-DETECTION_CONF = 0.5
-DETECTION_IOU  = 0.45
+def preprocess(img):
+    h, w = img.shape[:2]
+    scale = min(INPUT_SIZE / h, INPUT_SIZE / w)
+    nh, nw = int(h * scale), int(w * scale)
+    resized = cv2.resize(img, (nw, nh))
+
+    canvas = np.full((INPUT_SIZE, INPUT_SIZE, 3), 114, dtype=np.uint8)
+    canvas[0:nh, 0:nw] = resized
+
+    blob = canvas[:, :, ::-1].astype(np.float32) / 255.0
+    blob = blob.transpose(2, 0, 1)[np.newaxis, ...]
+    return blob, scale, (h, w)
 
 
-HELMET_KEYWORDS = ['helmet', 'hardhat', 'with_helmet', 'wearing_helmet']
+def nms(boxes, scores, iou_threshold):
+    idxs = cv2.dnn.NMSBoxes(
+        boxes.tolist(), scores.tolist(), DETECTION_CONF, iou_threshold
+    )
+    if len(idxs) == 0:
+        return []
+    return idxs.flatten().tolist()
 
 
-NO_HELMET_KEYWORDS = ['no_helmet', 'no-helmet', 'without_helmet',
-                       'without-helmet', 'head', 'no helmet', 'nohelmet']
+def postprocess(output, scale, orig_shape):
+    predictions = np.squeeze(output[0]).T
+    scores = np.max(predictions[:, 4:], axis=1)
+    keep = scores > DETECTION_CONF
+    predictions = predictions[keep]
+    scores = scores[keep]
+    class_ids = np.argmax(predictions[:, 4:], axis=1)
 
-print(model.names)
+    if len(predictions) == 0:
+        return []
 
-PERSON_KEYWORDS = ['person']
+    boxes = predictions[:, :4].copy()
+    boxes[:, 0] = boxes[:, 0] - boxes[:, 2] / 2
+    boxes[:, 1] = boxes[:, 1] - boxes[:, 3] / 2
+
+    boxes /= scale
+
+    keep_idxs = nms(boxes, scores, DETECTION_IOU)
+
+    detections = []
+    h, w = orig_shape
+    for i in keep_idxs:
+        x, y, bw, bh = boxes[i]
+        x1 = max(0, int(x))
+        y1 = max(0, int(y))
+        x2 = min(w, int(x + bw))
+        y2 = min(h, int(y + bh))
+        detections.append({
+            "class_id": int(class_ids[i]),
+            "class_name": CLASS_NAMES.get(int(class_ids[i]), str(class_ids[i])),
+            "confidence": float(scores[i]),
+            "box": (x1, y1, x2, y2)
+        })
+    return detections
 
 
-def classify_detections(results):
-   
+def draw_detections(img, detections):
+    for det in detections:
+        x1, y1, x2, y2 = det["box"]
+        label = det["class_name"]
+        conf = det["confidence"]
+        color = (0, 200, 0) if label.lower() == "helmet" else (0, 0, 230)
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+        text = f"{label} {conf:.2f}"
+        cv2.putText(img, text, (x1, max(y1 - 8, 0)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+    return img
+
+
+def classify_detections(detections):
     wearing = 0
     not_wearing = 0
-    person_count = 0
-    total = 0
-
-    for r in results:
-        for box in r.boxes:
-            total += 1
-            class_id = int(box.cls[0])
-            class_name = model.names[class_id]
-            confidence = float(box.conf[0])
-            class_lower = class_name.lower().strip()
-
-
-            if class_lower in NO_HELMET_KEYWORDS:
-             not_wearing += 1
-             print(f"NO_HELMET -> {class_name}")
-            elif class_lower in HELMET_KEYWORDS:
-              wearing += 1
-              print(f"HELMET -> {class_name}")
-            elif any(k in class_lower for k in PERSON_KEYWORDS):
-                person_count += 1
-                print(f"  PERSON   -> {class_name} ({confidence:.2f})")
-            else:
-
-                print(f"  OTHER    -> {class_name} ({confidence:.2f}) - ignored")
-
-    return wearing, not_wearing, person_count, total
+    for det in detections:
+        name = det["class_name"].lower().strip()
+        if name == "helmet":
+            wearing += 1
+        elif name == "no helmet":
+            not_wearing += 1
+    return wearing, not_wearing, len(detections)
 
 
 def detect_objects(image_data):
     try:
         start = time.perf_counter()
-
 
         if ',' in image_data:
             image_data = image_data.split(',')[1]
@@ -77,35 +121,21 @@ def detect_objects(image_data):
         if img is None:
             raise ValueError("Could not decode image")
 
+        blob, scale, orig_shape = preprocess(img)
+        output = session.run(None, {input_name: blob})
+        detections = postprocess(output, scale, orig_shape)
 
-        results = model(img, imgsz=640, conf=DETECTION_CONF, iou=DETECTION_IOU)
-
-
-        result_img = results[0].plot(line_width=2, font_size=0.8, conf=True)
-
-        wearing, not_wearing, person_count, total = classify_detections(results)
-
-
-
-
-
-
+        result_img = draw_detections(img.copy(), detections)
+        wearing, not_wearing, total = classify_detections(detections)
 
         if wearing > 0:
-            final_helmet = wearing
-            final_no_helmet = 0
+            final_helmet, final_no_helmet = wearing, 0
         elif not_wearing > 0:
-            final_helmet = 0
-            final_no_helmet = not_wearing
-        elif person_count > 0:
-            final_helmet = 0
-            final_no_helmet = person_count
+            final_helmet, final_no_helmet = 0, not_wearing
         else:
-            final_helmet = 0
-            final_no_helmet = 0
+            final_helmet, final_no_helmet = 0, 0
 
-        processing_time = round((time.time() - start) * 1000, 2)
-
+        processing_time = round((time.perf_counter() - start) * 1000, 2)
 
         _, buffer = cv2.imencode('.jpg', result_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
         result_base64 = base64.b64encode(buffer).decode('utf-8')
@@ -133,7 +163,7 @@ def detect():
         if not data or 'image' not in data:
             return jsonify({'success': False, 'error': 'No image data provided'}), 400
 
-        if model is None:
+        if session is None:
             return jsonify({'success': False, 'error': 'Model not loaded'}), 500
 
         result_image, proc_time, wearing, not_wearing, total = detect_objects(data['image'])
@@ -155,15 +185,14 @@ def detect():
 def health():
     return jsonify({
         'status': 'healthy',
-        'model': 'loaded' if model else 'failed',
-        'model_classes': list(model.names.values()) if model else []
+        'model': 'loaded' if session else 'failed',
+        'model_classes': list(CLASS_NAMES.values())
     })
 
 
 if __name__ == '__main__':
     print("Starting Helmet Detection System on http://localhost:5000")
     app.run(
-    host="0.0.0.0",
-    port=int(os.environ.get("PORT", 5000))
-)
-
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000))
+    )
