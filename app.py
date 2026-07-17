@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import cv2
 import numpy as np
 import base64
@@ -188,6 +188,11 @@ def health():
         'model': 'loaded' if session else 'failed',
         'model_classes': list(CLASS_NAMES.values())
     })
+
+
+@app.route('/test_images/<path:filename>')
+def serve_test_images(filename):
+    return send_from_directory('test_images', filename)
 
 
 if __name__ == '__main__':

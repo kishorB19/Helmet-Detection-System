@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: helmet-detection
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 1 --threads 2 --timeout 120 app:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
